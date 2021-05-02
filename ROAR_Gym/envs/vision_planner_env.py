@@ -16,10 +16,10 @@ from collections import OrderedDict
 class ROARPIDEnv(ROAREnv):
     def __init__(self, params):
         super().__init__(params)
-        # action_space = speed, long_k, lat_k
-
-        self.action_space = gym.spaces.Box(low=np.array([0, 0, 0, 0, 0, 0, 0]),
-                                           high=np.array([200, 1, 1, 1, 1, 1, 1]), dtype=np.float64)
+        # action_space = throttle, steering
+        
+        self.action_space = gym.spaces.Box(low=np.array([0.3, -.7]),
+                                           high=np.array([1, .7]), dtype=np.float)
         # observation_space = curr_speed, curr_transform, next_waypoint
         self.observation_space = gym.spaces.Box(low=np.array([-200,
                                                               -1000, -1000, -1000, -360, -360, -360,
@@ -30,6 +30,8 @@ class ROARPIDEnv(ROAREnv):
                                                                1000, 1000, 1000, 360, 360, 360]),
                                                 dtype=np.float64)
         self._prev_speed = 0
+
+        self.reset()
 
     def step(self, action: List[float]) -> Tuple[np.ndarray, float, bool, dict]:
         """
@@ -118,4 +120,11 @@ class ROARPIDEnv(ROAREnv):
 
     def reset(self) -> Any:
         super(ROARPIDEnv, self).reset()
+        self.steps = 0
         return self._get_obs()
+
+    # Checks if the car is stuck on a wall, used to determin if we should reset
+    def stuck(self):
+        if self.steps > 10 :
+            
+
