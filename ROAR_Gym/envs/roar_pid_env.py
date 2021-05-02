@@ -13,23 +13,19 @@ import gym
 import math
 from collections import OrderedDict
 
+
 class ROARPIDEnv(ROAREnv):
     def __init__(self, params):
         super().__init__(params)
-        # action_space = speed, long_k, lat_k
-
-        self.action_space = gym.spaces.Box(low=np.array([0, 0, 0, 0, 0, 0, 0]),
+        # action_space = target_speed, long_k, lat_k
+        self.action_space = gym.spaces.Box(low=np.array([10, 0, 0, 0, 0, 0, 0]),
                                            high=np.array([200, 1, 1, 1, 1, 1, 1]), dtype=np.float64)
-        # observation_space = curr_speed, curr_transform, next_waypoint
-        self.observation_space = gym.spaces.Box(low=np.array([-200,
-                                                              -1000, -1000, -1000, -360, -360, -360,
-                                                              -1000, -1000, -1000, -360, -360, -360,
-                                                              ]),
-                                                high=np.array([200,
-                                                               1000, 1000, 1000, 360, 360, 360,
-                                                               1000, 1000, 1000, 360, 360, 360]),
+        # observation_space = curr_speed, curr_throttle, curr_steering
+        self.observation_space = gym.spaces.Box(low=np.array([-200, -1, -1]),
+                                                high=np.array([200, 1, 1]),
                                                 dtype=np.float64)
         self._prev_speed = 0
+        self._prev_waypoint = None
 
     def step(self, action: List[float]) -> Tuple[np.ndarray, float, bool, dict]:
         """
@@ -45,7 +41,8 @@ class ROARPIDEnv(ROAREnv):
         assert type(action) == list or type(action) == np.ndarray, f"Action is of type {type(action)}"
         assert len(action) == 7, f"Action of shape {np.shape(action)} is not correct"
         self._prev_speed = Vehicle.get_speed(self.agent.vehicle)
-
+        if len(self.agent.local_planner.way_points_queue) > 0:
+            self._prev_waypoint = self.agent.local_planner.way_points_queue[0].to_array()
         target_speed = action[0]
         long_k_p, long_k_d, long_k_i = action[1], action[2], action[3]
         lat_k_p, lat_k_d, lat_k_i = action[4], action[5], action[6]
@@ -63,39 +60,49 @@ class ROARPIDEnv(ROAREnv):
         return obs, reward, is_done, other_info
 
     def _get_obs(self) -> Any:
-        curr_speed = np.array([Vehicle.get_speed(self.agent.vehicle)])
-        curr_transform = self.agent.vehicle.transform.to_array()
-        if len(self.agent.local_planner.way_points_queue) > 0:
-            next_waypoint_transform = self.agent.local_planner.way_points_queue[0].to_array()
-        else:
-            next_waypoint_transform = curr_transform
-        return np.append(np.append(curr_speed, curr_transform), next_waypoint_transform)
+        curr_speed = np.array([Vehicle.get_speed(self.agent.vehicle),
+                               self.agent.vehicle.control.throttle,
+                               self.agent.vehicle.control.steering])
+        return curr_speed
 
     def get_reward(self) -> float:
         reward: float = 0.0
-        target_speed = self.agent.kwargs["target_speed"]
         current_speed = Vehicle.get_speed(self.agent.vehicle)
-
         if self.carla_runner.get_num_collision() > self.max_collision_allowed:
-            reward += -1000000
-        else:
-            # made a right step without collision
-            reward = 10.0  # base reward for making a successful step
+            reward -= 1000000
 
         # if the agent is able to complete a lap, reward heavy
         if self.agent.is_done:
-            reward += 1000000
+            reward += 100
+
+        if self.agent.time_counter > 100 and Vehicle.get_speed(self.agent.vehicle) < 1:
+            # so that the agent is encouraged to move
+            reward -= 100000
+        try:
+            if len(self.agent.local_planner.way_points_queue) > 0 and \
+                    self._prev_waypoint != self.agent.local_planner.way_points_queue[0].to_array():
+                # so that the agent is encouraged to go to the next waypoint
+                reward += 100
+        except Exception as e:
+            pass
 
         # if the agent tries to turn too much, penalize
         if abs(self.agent.vehicle.control.steering) > 0.3:
             # prevent it from over steering
-            reward -= 50
+            reward -= 10
+        if current_speed < 10:
+            # again, agent is encouraged to move
+            reward = 0
+        else:
+            reward += current_speed
 
-        if current_speed < 50 or target_speed < 50:
-            # i can definitely go through all the track above 50 km/h
-            reward -= 1000
-        elif current_speed > self._prev_speed:
-            reward += 10
+        if current_speed < 80:
+            # i know that you can drive around the track at least with this speed
+            reward -= 100
+
+        if current_speed > self._prev_speed:
+            # agent is incentivized to go faster
+            reward += 1
         return reward
 
     def _get_info(self) -> dict:
@@ -119,3 +126,13 @@ class ROARPIDEnv(ROAREnv):
     def reset(self) -> Any:
         super(ROARPIDEnv, self).reset()
         return self._get_obs()
+
+    def _terminal(self) -> bool:
+        is_done = super(ROARPIDEnv, self)._terminal()
+        if is_done:
+            return True
+        else:
+            if self.agent.time_counter > 100 and Vehicle.get_speed(self.agent.vehicle) < 1:
+                return True
+            else:
+                return False

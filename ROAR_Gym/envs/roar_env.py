@@ -8,9 +8,13 @@ from typing import Optional, Tuple, Any, Dict
 from ROAR.agent_module.pure_pursuit_agent import PurePursuitAgent
 from ROAR.agent_module.agent import Agent
 from abc import ABC
-from stable_baselines.common.callbacks import BaseCallback
+# from stable_baselines3.common.callbacks import BaseCallback
+# from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines.common.base_class import BaseRLModel
+from stable_baselines.common.callbacks import BaseCallback
 from pprint import pformat
+from abc import abstractmethod
+import time
 
 class ROAREnv(gym.Env, ABC):
     def __init__(self, params: Dict[str, Any]):
@@ -22,6 +26,7 @@ class ROAREnv(gym.Env, ABC):
         Args:
             params:
         """
+        self.env_params = params
         carla_config: CarlaConfig = params["carla_config"]
         agent_config: AgentConfig = params["agent_config"]
         ego_agent_class = params.get("ego_agent_class", Agent)
@@ -45,6 +50,7 @@ class ROAREnv(gym.Env, ABC):
         self.action_space = None  # overwrite in higher classes
         self.observation_space = None  # overwrite in higher classes
 
+    @abstractmethod
     def step(self, action: Any) -> Tuple[Any, float, bool, dict]:
         """
         This provides an example implementation of step, intended to be overwritten
@@ -61,27 +67,34 @@ class ROAREnv(gym.Env, ABC):
                                                                                    clock=self.clock)
 
         self.carla_runner.world.tick(self.clock)
-        sensor_data, new_vehicle = self.carla_runner.convert_data()
+        self.carla_runner.fetch_data_async()
+        sensor_data, new_vehicle = self.carla_runner.sensor_data.copy(), self.carla_runner.vehicle_state.copy()
         if self.carla_runner.agent_settings.enable_autopilot:
             if self.agent is None:
                 raise Exception(
                     "In autopilot mode, but no agent is defined.")
+
             agent_control = self.agent.run_step(vehicle=new_vehicle,
                                                 sensors_data=sensor_data)
             carla_control = self.carla_runner.carla_bridge.convert_control_from_agent_to_source(agent_control)
         self.carla_runner.world.player.apply_control(carla_control)
-        return self._get_obs(), self.get_reward(), self._terminal(), self._get_info()
+        result = self._get_obs(), self.get_reward(), self._terminal(), self._get_info()
+        return result
 
     def reset(self) -> Any:
+        if self.agent is not None:
+            self.agent.shutdown_module_threads()
         self.carla_runner.on_finish()
         self.carla_runner = CarlaRunner(agent_settings=self.agent_config,
                                         carla_settings=self.carla_config,
                                         npc_agent_class=self.npc_agent_class)
         vehicle = self.carla_runner.set_carla_world()
-        self.agent = self.EgoAgentClass(vehicle=vehicle, agent_settings=self.agent_config)
+        self.agent = self.EgoAgentClass(vehicle=vehicle,
+                                        agent_settings=self.agent_config,
+                                        kwargs=self.env_params)
         self.clock: Optional[pygame.time.Clock] = None
         self._start_game()
-        return self.agent
+        return self._get_obs()
 
     def render(self, mode='ego'):
         self.carla_runner.world.render(display=self.carla_runner.display)
@@ -97,24 +110,27 @@ class ROAREnv(gym.Env, ABC):
         except Exception as e:
             self.logger.error(e)
 
+    @abstractmethod
     def get_reward(self) -> float:
         """
         Intended to be overwritten
         Returns:
 
         """
-        return -1
+        raise NotImplementedError
 
     def _terminal(self) -> bool:
         if self.carla_runner.get_num_collision() > self.max_collision_allowed:
             return True
         return self.agent.is_done  # TODO temporary, needs to be changed
 
+    @abstractmethod
     def _get_info(self) -> dict:
         return dict()
 
+    @abstractmethod
     def _get_obs(self) -> Any:
-        return self.agent
+        raise NotImplementedError
 
 
 class LoggingCallback(BaseCallback):
@@ -125,7 +141,6 @@ class LoggingCallback(BaseCallback):
     def _on_step(self) -> bool:
         curr_step = self.locals.get("step")
         info = self.locals.get("info")
-
-        msg = f"Step = {curr_step} \n{pformat(info)}"
+        msg = f"Step = {curr_step} \n{pformat(info)}\n"
         self.logger.log(msg)
         return True

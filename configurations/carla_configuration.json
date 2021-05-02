@@ -26,10 +26,11 @@
   "gamma": 2.2,
   "save_semantic_segmentation": false,
   "print_keyboard_hint": false,
-  "synchronous_mode": false,
+  "synchronous_mode": true,
   "no_rendering_mode": false,
-  "fixed_delta_seconds": 0.05,
+  "fixed_delta_seconds": 0.5,
   "should_spawn_npcs": false,
   "npc_config_file_path": "../ROAR_Sim/configurations/npc_config.json",
-  "agent_config_path": "./configurations/agent_configuration.json"
+  "agent_config_path": "./configurations/agent_configuration.json",
+  "should_visualize_with_pygame": true
 }
