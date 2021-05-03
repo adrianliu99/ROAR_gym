@@ -29,3 +29,11 @@ register(
     id='roar-occu-debug-v0',
     entry_point='ROAR_Gym.envs:OccuDebug'
 )
+register(
+    id='roar-local-planner-new-reward-v0',
+    entry_point='ROAR_Gym.envs:LocalPlannerNewRewardEnv'
+)
+register(
+    id='roar-depth-e2e-new-reward-v0',
+    entry_point='ROAR_Gym.envs:DepthE2ENewRewardEnv'
+)
