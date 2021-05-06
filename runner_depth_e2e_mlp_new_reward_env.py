@@ -15,7 +15,7 @@ from ROAR_Sim.configurations.configuration import Configuration as CarlaConfig
 from ROAR.configurations.configuration import Configuration as AgentConfig
 from ROAR.agent_module.rl_depth_e2e_agent import RLDepthE2EAgent
 # from stable_baselines.ddpg.policies import CnnPolicy
-from stable_baselines.common.policies import CnnPolicy
+from stable_baselines.common.policies import MlpPolicy
 from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import PPO2
 from datetime import datetime
@@ -40,7 +40,7 @@ def main(output_folder_path: Path):
         "max_collision": 5,
     }
 
-    env = DummyVecEnv([lambda : gym.make('roar-depth-e2e-new-reward-v0', params=params)])
+    env = DummyVecEnv([lambda : gym.make('roar-depth-e2e-mlp-new-reward-v0', params=params)])
     env.reset()
 
     tensorboard_dir = (output_folder_path / "tensorboard")
@@ -57,10 +57,10 @@ def main(output_folder_path: Path):
     }
     latest_model_path = find_latest_model(Path(output_folder_path))
     if latest_model_path is None:
-        print("new model")
-        model = PPO2(CnnPolicy, **model_params)
+        print("creating new model")
+        model = PPO2(MlpPolicy, **model_params)
     else:
-        print(f"loading model {latest_model_path}")
+        print(f"loading from : {latest_model_path}")
         model = PPO2.load(latest_model_path, **model_params)
 
     logging_callback = LoggingCallback(model=model)
@@ -76,4 +76,4 @@ if __name__ == '__main__':
                         datefmt="%H:%M:%S", level=logging.INFO)
     logging.getLogger("Controller").setLevel(logging.ERROR)
     logging.getLogger("SimplePathFollowingLocalPlanner").setLevel(logging.ERROR)
-    main(output_folder_path=Path(os.getcwd()) / "output" / "depth_e2e_new_reward_v0")
+    main(output_folder_path=Path(os.getcwd()) / "output" / "depth_e2e_mlp_new_reward_v0_0.6")

@@ -7,3 +7,5 @@ from ROAR_Gym.envs.occu_map_e2e_env import OccuMapE2EEnv
 from ROAR_Gym.envs.occu_debug import OccuDebug
 from ROAR_Gym.envs.local_planner_new_reward_env import LocalPlannerNewRewardEnv
 from ROAR_Gym.envs.depth_e2e_new_reward_env import DepthE2ENewRewardEnv
+from ROAR_Gym.envs.depth_e2e_mlp_new_reward_env import DepthE2EMLPNewRewardEnv
+from ROAR_Gym.envs.depth_panner_mlp_new_reward_env import DepthPlannerMLPNewRewardEnv

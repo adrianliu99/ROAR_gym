@@ -16,6 +16,8 @@ def find_latest_model(root_path: Path) -> Optional[Path]:
     }
     if len(paths_dict) == 0:
         return None
+    return paths[-1]
+    
     latest_model_file_path: Optional[Path] = paths_dict.get(max(paths_dict.keys()), None)
     return latest_model_file_path
 

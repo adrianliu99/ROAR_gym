@@ -14,15 +14,16 @@ from ROAR.utilities_module.track_visualizer import read_txt
 import cv2
 import time
 
-class DepthE2ENewRewardEnv(ROAREnv):
+class DepthPlannerMLPNewRewardEnv(ROAREnv):
     def __init__(self, params: Dict[str, Any]):
         super().__init__(params)
         # action space = next waypoint
         self.action_space = gym.spaces.Box(low=np.array([0, -1]),
                                            high=np.array([1, 1]),
                                            dtype=np.float32)  #  long (y) throttle, lat (x) steering,
-        self.observation_space = gym.spaces.Box(low=0, high=255,
-                                                shape=(84, 84, 1), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=np.zeros([84 * 84 + 2]), 
+                                                high=np.ones([84 * 84 + 2]) * 255, 
+                                                dtype=np.float32)
         self.curr_debug_info: OrderedDict = OrderedDict()
 
         self.track_points = np.array(read_txt(Path("../ROAR_Sim/data/easy_map_waypoints.txt")))
@@ -58,12 +59,14 @@ class DepthE2ENewRewardEnv(ROAREnv):
         for _ in range(self.action_repeat):
             self.agent.kwargs["control"] = control
             self.curr_debug_info["control"] = control
-            obs, reward, done, info =  super(DepthE2ENewRewardEnv, self).step(action=action)
+            obs, reward, done, info =  super().step(action=action)
             reward_ += reward
+            self.cum_reward += reward
             if done:
                 break
         self.render()
         if done:
+            print(self.best_track_point_idx)
             print(self.cum_reward)
         self.prev_steering = self.steering
         return obs, reward_, done, info
@@ -73,7 +76,8 @@ class DepthE2ENewRewardEnv(ROAREnv):
 
     def render(self, mode='ego'):
         super().render(mode)
-        cv2.imshow("depth_resized", self._get_obs())
+        obs = self._get_obs()[2:].reshape((84, 84))
+        cv2.imshow("depth_resized", obs)
         cv2.waitKey(1)
     
     def get_reward(self) -> float:
@@ -93,14 +97,10 @@ class DepthE2ENewRewardEnv(ROAREnv):
         if self.steps < (25 / self.action_repeat):
             return 0
 
-        reward: float = -1.0
+        reward: float = -0.1
 
-        print(self.steering)
-        print(self.prev_steering)
-        print()
-        if abs(self.steering - self.prev_steering) > 0.2:
-            reward -= 0.7
-
+        # if abs(self.steering - self.prev_steering) > 0.2:
+        #     reward -= 0.7
 
         start_idx = max(0, self.best_track_point_idx - 30)
         end_idx = min(self.best_track_point_idx + 50, len(self.track_points))
@@ -123,7 +123,6 @@ class DepthE2ENewRewardEnv(ROAREnv):
         
         self.best_track_point_idx = max(self.best_track_point_idx, best_idx)
         self.reward = reward
-        self.cum_reward += reward
         # print(f"Steps {self.steps} \n Trajectoreis {self.trajectories}\n cum_reward {self.cum_reward}")
         return reward
 
@@ -134,8 +133,10 @@ class DepthE2ENewRewardEnv(ROAREnv):
         if self.agent.front_depth_camera is not None and self.agent.front_depth_camera.data is not None:
             obs[:, :, 0] = self.agent.front_depth_camera.data[:,:]
         obs_ = cv2.resize(obs, (84, 84))
-        obs = np.ones(shape=(84,84,1))
-        obs[:,:,0] = obs_[:,:]
+        obs = np.ones(84*84 + 2)
+        obs[2:] = obs_.flatten()[:]
+        obs[0] = Vehicle.get_speed(self.agent.vehicle)
+        obs[1] = self.agent.vehicle.control.steering
         return obs
 
     def _terminal(self) -> bool:

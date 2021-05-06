@@ -37,3 +37,11 @@ register(
     id='roar-depth-e2e-new-reward-v0',
     entry_point='ROAR_Gym.envs:DepthE2ENewRewardEnv'
 )
+register(
+    id='roar-depth-e2e-mlp-new-reward-v0',
+    entry_point='ROAR_Gym.envs:DepthE2EMLPNewRewardEnv'
+)
+register(
+    id='roar-depth-planner-mlp-new-reward-v0',
+    entry_point='ROAR_Gym.envs:DepthPlannerMLPNewRewardEnv'
+)
